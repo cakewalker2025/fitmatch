@@ -48,7 +48,8 @@ export type HarmonyModel =
   | "monochromatic"
   | "analogous"
   | "complementary"
-  | "triadic";
+  | "triadic"
+  | "neutral-based";
 
 export type Confidence = "high" | "medium" | "low";
 

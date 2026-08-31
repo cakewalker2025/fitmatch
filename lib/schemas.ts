@@ -51,6 +51,7 @@ export const harmonyModelSchema = z.enum([
   "analogous",
   "complementary",
   "triadic",
+  "neutral-based",
 ]);
 
 export const confidenceSchema = z.enum(["high", "medium", "low"]);
