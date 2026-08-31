@@ -1,10 +1,9 @@
+import { GoogleGenAI } from "@google/genai";
 import { OUTFIT_STYLIST_PROMPT } from "./prompts/outfitStylist";
 import { outfitStylistResponseSchema } from "../schemas";
 import type { Garment, Outfit, UserProfile } from "../types";
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 const DEFAULT_MAX_TOKENS = 1024;
 const OUTFIT_GENERATION_MAX_TOKENS = 4096;
 
@@ -13,37 +12,22 @@ export interface ImageData {
   mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 }
 
-interface AnthropicImageContentBlock {
-  type: "image";
-  source: {
-    type: "base64";
-    media_type: ImageData["mediaType"];
+interface GeminiInlineDataPart {
+  inlineData: {
     data: string;
+    mimeType: ImageData["mediaType"];
   };
 }
 
-interface AnthropicTextContentBlock {
-  type: "text";
+interface GeminiTextPart {
   text: string;
 }
 
-type AnthropicUserContentBlock =
-  | AnthropicImageContentBlock
-  | AnthropicTextContentBlock;
-
-interface AnthropicResponseContentBlock {
-  type: string;
-  text?: string;
-}
-
-interface AnthropicMessagesResponse {
-  content: AnthropicResponseContentBlock[];
-  [key: string]: unknown;
-}
+type GeminiUserContentPart = GeminiInlineDataPart | GeminiTextPart;
 
 interface CallClaudeParams {
   systemPrompt: string;
-  userContent: string | AnthropicUserContentBlock[];
+  userContent: string | GeminiUserContentPart[];
   maxTokens?: number;
 }
 
@@ -52,53 +36,29 @@ export async function callClaude({
   userContent,
   maxTokens = DEFAULT_MAX_TOKENS,
 }: CallClaudeParams): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set in the environment");
+    throw new Error("GEMINI_API_KEY is not set in the environment");
   }
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
+  const ai = new GoogleGenAI({ apiKey });
+
+  const response = await ai.models.generateContent({
+    model: DEFAULT_MODEL,
+    contents: userContent,
+    config: {
+      systemInstruction: systemPrompt,
+      maxOutputTokens: maxTokens,
+      responseMimeType: "application/json",
     },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
-    }),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `Anthropic API request failed (${response.status}): ${errorBody}`
-    );
+  const text = response.text;
+  if (!text) {
+    throw new Error("Gemini API response did not contain a text part");
   }
 
-  const data = (await response.json()) as AnthropicMessagesResponse;
-
-  if (!Array.isArray(data.content)) {
-    throw new Error(
-      "Anthropic API response did not contain a content array"
-    );
-  }
-
-  const textBlock = data.content.find((block) => block.type === "text");
-
-  if (!textBlock?.text) {
-    throw new Error("Anthropic API response did not contain a text block");
-  }
-
-  return textBlock.text;
+  return text;
 }
 
 export async function analyzeImage(
@@ -110,15 +70,12 @@ export async function analyzeImage(
     systemPrompt,
     userContent: [
       {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: image.mediaType,
+        inlineData: {
           data: image.base64,
+          mimeType: image.mediaType,
         },
       },
       {
-        type: "text",
         text: userText ?? "Analyze this image.",
       },
     ],
@@ -140,14 +97,14 @@ export async function generateOutfits(
     parsed = JSON.parse(responseText);
   } catch {
     throw new Error(
-      `Anthropic API response was not valid JSON: ${responseText}`
+      `Gemini API response was not valid JSON: ${responseText}`
     );
   }
 
   const result = outfitStylistResponseSchema.safeParse(parsed);
   if (!result.success) {
     throw new Error(
-      `Anthropic API response did not match the expected shape: ${result.error.message}`
+      `Gemini API response did not match the expected shape: ${result.error.message}`
     );
   }
 
