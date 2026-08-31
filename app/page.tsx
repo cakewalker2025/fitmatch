@@ -1,11 +1,33 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Garment } from "@/lib/types";
+import type { Garment, UserProfile } from "@/lib/types";
 
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 type Status = "idle" | "loading" | "success" | "error";
+
+type ProfileDraft = {
+  skinUndertone: UserProfile["skinUndertone"] | "";
+  skinDepth: UserProfile["skinDepth"] | "";
+  hairColor: string;
+  eyeColor: string;
+  bodyShape: string;
+  height: string;
+  occasion: string;
+  weather: string;
+};
+
+const EMPTY_PROFILE_DRAFT: ProfileDraft = {
+  skinUndertone: "",
+  skinDepth: "",
+  hairColor: "",
+  eyeColor: "",
+  bodyShape: "",
+  height: "",
+  occasion: "",
+  weather: "",
+};
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -25,7 +47,21 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [closet, setCloset] = useState<Garment[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT);
   const previewUrlRef = useRef<string | null>(null);
+
+  const isProfileComplete =
+    profile.skinUndertone !== "" &&
+    profile.skinDepth !== "" &&
+    profile.hairColor.trim() !== "" &&
+    profile.eyeColor.trim() !== "" &&
+    profile.bodyShape.trim() !== "" &&
+    profile.height.trim() !== "" &&
+    profile.occasion.trim() !== "";
+
+  function updateProfile<K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) {
+    setProfile((prev) => ({ ...prev, [key]: value }));
+  }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -149,6 +185,139 @@ export default function Home() {
             {errorMessage}
           </div>
         )}
+
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-4 dark:border-indigo-900 dark:bg-indigo-950">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold tracking-tight text-black dark:text-zinc-50">
+              Your Profile
+            </h2>
+            {isProfileComplete && (
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-300">
+                ✓ Profile saved
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Skin Undertone
+              </label>
+              <select
+                value={profile.skinUndertone}
+                onChange={(e) =>
+                  updateProfile("skinUndertone", e.target.value as ProfileDraft["skinUndertone"])
+                }
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                <option value="" disabled>
+                  Select…
+                </option>
+                <option value="warm">Warm</option>
+                <option value="cool">Cool</option>
+                <option value="neutral">Neutral</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Skin Depth
+              </label>
+              <select
+                value={profile.skinDepth}
+                onChange={(e) =>
+                  updateProfile("skinDepth", e.target.value as ProfileDraft["skinDepth"])
+                }
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                <option value="" disabled>
+                  Select…
+                </option>
+                <option value="light">Light</option>
+                <option value="medium">Medium</option>
+                <option value="deep">Deep</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Hair Color
+              </label>
+              <input
+                type="text"
+                value={profile.hairColor}
+                onChange={(e) => updateProfile("hairColor", e.target.value)}
+                placeholder="e.g. dark brown"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Eye Color
+              </label>
+              <input
+                type="text"
+                value={profile.eyeColor}
+                onChange={(e) => updateProfile("eyeColor", e.target.value)}
+                placeholder="e.g. brown"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Body Shape
+              </label>
+              <input
+                type="text"
+                value={profile.bodyShape}
+                onChange={(e) => updateProfile("bodyShape", e.target.value)}
+                placeholder="e.g. rectangle"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Height
+              </label>
+              <input
+                type="text"
+                value={profile.height}
+                onChange={(e) => updateProfile("height", e.target.value)}
+                placeholder="e.g. 5'10&quot;"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Occasion
+              </label>
+              <input
+                type="text"
+                value={profile.occasion}
+                onChange={(e) => updateProfile("occasion", e.target.value)}
+                placeholder="e.g. business casual office day"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Weather <span className="font-normal text-zinc-500 dark:text-zinc-500">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={profile.weather}
+                onChange={(e) => updateProfile("weather", e.target.value)}
+                placeholder="e.g. mild, 65°F"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+          </div>
+        </div>
 
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-black dark:text-zinc-50">
