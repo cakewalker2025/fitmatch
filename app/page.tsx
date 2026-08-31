@@ -23,7 +23,7 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
-  const [garment, setGarment] = useState<Garment | null>(null);
+  const [closet, setCloset] = useState<Garment[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
 
@@ -34,7 +34,6 @@ export default function Home() {
       URL.revokeObjectURL(previewUrlRef.current);
     }
 
-    setGarment(null);
     setErrorMessage(null);
     setStatus("idle");
 
@@ -64,7 +63,6 @@ export default function Home() {
 
     setStatus("loading");
     setErrorMessage(null);
-    setGarment(null);
 
     try {
       const base64 = await fileToBase64(selectedFile);
@@ -83,8 +81,15 @@ export default function Home() {
         return;
       }
 
-      setGarment(body as Garment);
-      setStatus("success");
+      setCloset((prev) => [body as Garment, ...prev]);
+
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+      previewUrlRef.current = null;
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setStatus("idle");
     } catch (error) {
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
@@ -145,51 +150,53 @@ export default function Home() {
           </div>
         )}
 
-        {status === "success" && garment && (
-          <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center gap-3">
-              <div
-                className="h-12 w-12 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700"
-                style={{ backgroundColor: garment.primaryColor }}
-              />
-              <div>
-                <div className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                  Primary Color
-                </div>
-                <div className="font-mono text-sm text-zinc-800 dark:text-zinc-200">
-                  {garment.primaryColor}
-                </div>
-              </div>
-            </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-black dark:text-zinc-50">
+            Your Closet
+          </h2>
 
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                  Category
-                </dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">{garment.category}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                  Pattern
-                </dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">{garment.pattern}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                  Fabric Weight
-                </dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">{garment.fabricWeight}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                  Formality
-                </dt>
-                <dd className="text-zinc-800 dark:text-zinc-200">{garment.formality}</dd>
-              </div>
-            </dl>
-          </div>
-        )}
+          {closet.length === 0 ? (
+            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
+              No garments yet — upload a photo to get started.
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {closet.map((item) => (
+                <div
+                  key={item.id}
+                  className="relative flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCloset((prev) => prev.filter((g) => g.id !== item.id))
+                    }
+                    aria-label="Remove garment"
+                    className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    ×
+                  </button>
+
+                  <div
+                    className="h-8 w-8 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700"
+                    style={{ backgroundColor: item.primaryColor }}
+                  />
+
+                  <dl className="text-xs leading-tight">
+                    <dt className="text-zinc-500 dark:text-zinc-500">Category</dt>
+                    <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.category}</dd>
+                    <dt className="text-zinc-500 dark:text-zinc-500">Pattern</dt>
+                    <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.pattern}</dd>
+                    <dt className="text-zinc-500 dark:text-zinc-500">Fabric Weight</dt>
+                    <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.fabricWeight}</dd>
+                    <dt className="text-zinc-500 dark:text-zinc-500">Formality</dt>
+                    <dd className="text-zinc-800 dark:text-zinc-200">{item.formality}</dd>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
