@@ -108,14 +108,17 @@ function CustomSelect<T extends string>({
 
 const MAX_UPLOAD_DIMENSION = 1600;
 const UPLOAD_JPEG_QUALITY = 0.8;
+const PHOTO_STORAGE_MAX_DIMENSION = 400;
+const PHOTO_STORAGE_WEBP_QUALITY = 0.75;
+const GARMENT_PHOTOS_BUCKET = "garment-photos";
 
-function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+function loadImageToCanvas(file: File, maxDimension: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
 
     img.onload = () => {
-      const scale = Math.min(1, MAX_UPLOAD_DIMENSION / Math.max(img.width, img.height));
+      const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
       const width = Math.round(img.width * scale);
       const height = Math.round(img.height * scale);
 
@@ -132,9 +135,7 @@ function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: s
       }
 
       ctx.drawImage(img, 0, 0, width, height);
-
-      const dataUrl = canvas.toDataURL("image/jpeg", UPLOAD_JPEG_QUALITY);
-      resolve({ base64: dataUrl.split(",")[1] ?? "", mediaType: "image/jpeg" });
+      resolve(canvas);
     };
 
     img.onerror = () => {
@@ -143,6 +144,23 @@ function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: s
     };
 
     img.src = objectUrl;
+  });
+}
+
+async function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+  const canvas = await loadImageToCanvas(file, MAX_UPLOAD_DIMENSION);
+  const dataUrl = canvas.toDataURL("image/jpeg", UPLOAD_JPEG_QUALITY);
+  return { base64: dataUrl.split(",")[1] ?? "", mediaType: "image/jpeg" };
+}
+
+async function resizeImageToWebpBlob(file: File): Promise<Blob> {
+  const canvas = await loadImageToCanvas(file, PHOTO_STORAGE_MAX_DIMENSION);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Failed to create image blob"))),
+      "image/webp",
+      PHOTO_STORAGE_WEBP_QUALITY
+    );
   });
 }
 
@@ -157,6 +175,7 @@ export default function Home() {
   const [closetLoadError, setClosetLoadError] = useState<string | null>(null);
   const [closetActionError, setClosetActionError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [photoUploadNotice, setPhotoUploadNotice] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
@@ -332,6 +351,7 @@ export default function Home() {
 
     setStatus("loading");
     setErrorMessage(null);
+    setPhotoUploadNotice(null);
 
     try {
       const { base64, mediaType } = await resizeImageToBase64(selectedFile);
@@ -379,6 +399,30 @@ export default function Home() {
       }
 
       setCloset((prev) => [garment, ...prev]);
+
+      try {
+        const photoBlob = await resizeImageToWebpBlob(selectedFile);
+        const photoPath = `${user.id}/${garment.id}.webp`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(GARMENT_PHOTOS_BUCKET)
+          .upload(photoPath, photoBlob, { contentType: "image/webp" });
+
+        if (uploadError) {
+          setPhotoUploadNotice("Garment added, but the photo couldn't be saved.");
+        } else {
+          const { error: photoUpdateError } = await supabase
+            .from("garments")
+            .update({ image_url: photoPath })
+            .eq("id", garment.id);
+
+          if (photoUpdateError) {
+            setPhotoUploadNotice("Garment added, but the photo couldn't be saved.");
+          }
+        }
+      } catch {
+        setPhotoUploadNotice("Garment added, but the photo couldn't be saved.");
+      }
 
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
@@ -522,6 +566,10 @@ export default function Home() {
           <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
             {errorMessage}
           </div>
+        )}
+
+        {photoUploadNotice && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">{photoUploadNotice}</p>
         )}
 
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-4 dark:border-indigo-900 dark:bg-indigo-950">
