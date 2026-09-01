@@ -1053,27 +1053,55 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <div className="mt-3 flex gap-4">
-                    {(["dominant", "secondary", "accent"] as const)
-                      .map((role) => ({ role, itemId: outfit.colorRoles[role] }))
-                      .filter(
-                        (entry): entry is { role: typeof entry.role; itemId: string } =>
-                          entry.itemId != null
-                      )
-                      .map(({ role, itemId }) => {
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {outfit.itemIds
+                      .map((itemId) => {
                         const item = closet.find((g) => g.id === itemId);
-                        return (
-                          <div key={role} className="flex flex-col items-center gap-1">
-                            <div
-                              className="h-8 w-8 rounded-md border border-zinc-300 dark:border-zinc-700"
-                              style={{ backgroundColor: item?.primaryColor ?? "#e5e7eb" }}
+                        const role = (
+                          Object.entries(outfit.colorRoles) as [string, string | null | undefined][]
+                        ).find(([, roleItemId]) => roleItemId === itemId)?.[0];
+                        return { itemId, item, role };
+                      })
+                      .filter(
+                        (
+                          entry
+                        ): entry is { itemId: string; item: Garment; role: string | undefined } =>
+                          entry.item != null
+                      )
+                      .map(({ itemId, item, role }) => (
+                        <div key={itemId} className="flex w-16 flex-col items-center gap-1 text-center">
+                          {item.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.photoUrl}
+                              alt={`${item.category} garment photo`}
+                              className="h-14 w-14 rounded-md border border-zinc-300 dark:border-zinc-700"
+                              style={{ objectFit: "cover" }}
                             />
-                            <span className="text-[10px] uppercase tracking-wide text-zinc-500 dark:text-zinc-500">
-                              {role}
-                            </span>
+                          ) : (
+                            <div
+                              className="h-14 w-14 rounded-md border border-zinc-300 dark:border-zinc-700"
+                              style={{ backgroundColor: item.primaryColor }}
+                            />
+                          )}
+                          <span className="text-[10px] font-medium capitalize text-zinc-700 dark:text-zinc-300">
+                            {item.category}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {item.photoUrl && (
+                              <span
+                                className="h-2 w-2 rounded-full border border-zinc-300 dark:border-zinc-700"
+                                style={{ backgroundColor: item.primaryColor }}
+                              />
+                            )}
+                            {role && (
+                              <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                                {role}
+                              </span>
+                            )}
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                   </div>
 
                   <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">
