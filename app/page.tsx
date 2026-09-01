@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Garment, Outfit, UserProfile } from "@/lib/types";
+import AuthSection from "@/components/AuthSection";
+import { useSupabaseUser } from "@/lib/supabase/useUser";
 
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -145,6 +147,7 @@ function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: s
 }
 
 export default function Home() {
+  const { user, loading: authLoading } = useSupabaseUser();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
@@ -358,6 +361,10 @@ export default function Home() {
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex w-full max-w-xl flex-col gap-6 px-6 py-16">
+        <AuthSection />
+
+        {!authLoading && user && (
+          <>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
             FitMatch — Garment Analyzer
@@ -661,6 +668,8 @@ export default function Home() {
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );
