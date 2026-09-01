@@ -8,7 +8,6 @@ import { useSupabaseUser } from "@/lib/supabase/useUser";
 
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-const CLOSET_STORAGE_KEY = "fitmatch:closet";
 const PROFILE_SAVE_DEBOUNCE_MS = 800;
 
 const CONFIDENCE_DOT_COLOR: Record<Outfit["confidence"], string> = {
@@ -154,6 +153,9 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [closet, setCloset] = useState<Garment[]>([]);
+  const [closetLoaded, setClosetLoaded] = useState(false);
+  const [closetLoadError, setClosetLoadError] = useState<string | null>(null);
+  const [closetActionError, setClosetActionError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -163,31 +165,48 @@ export default function Home() {
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
-  const hasWrittenClosetRef = useRef(false);
 
   useEffect(() => {
-    try {
-      const rawCloset = localStorage.getItem(CLOSET_STORAGE_KEY);
-      if (rawCloset) {
-        const parsed = JSON.parse(rawCloset);
-        if (Array.isArray(parsed)) setCloset(parsed);
-      }
-    } catch {
-      // ignore — fall back to the empty default already set
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hasWrittenClosetRef.current) {
-      hasWrittenClosetRef.current = true;
+    if (!user) {
+      setCloset([]);
+      setClosetLoaded(false);
       return;
     }
-    try {
-      localStorage.setItem(CLOSET_STORAGE_KEY, JSON.stringify(closet));
-    } catch {
-      // ignore — e.g. private browsing storage restrictions
-    }
-  }, [closet]);
+
+    let cancelled = false;
+    setClosetLoaded(false);
+    setClosetLoadError(null);
+
+    supabase
+      .from("garments")
+      .select("id, primary_color, secondary_colors, category, pattern, fabric_weight, formality")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+
+        if (error) {
+          setClosetLoadError(error.message);
+        } else {
+          setCloset(
+            (data ?? []).map((row) => ({
+              id: row.id,
+              category: row.category,
+              primaryColor: row.primary_color,
+              secondaryColors: row.secondary_colors ?? [],
+              pattern: row.pattern,
+              fabricWeight: row.fabric_weight,
+              formality: row.formality,
+            }))
+          );
+        }
+        setClosetLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, supabase]);
 
   useEffect(() => {
     if (!user) {
@@ -301,7 +320,7 @@ export default function Home() {
   }
 
   async function handleAnalyze() {
-    if (!selectedFile) return;
+    if (!selectedFile || !user) return;
 
     if (!ALLOWED_MEDIA_TYPES.includes(selectedFile.type)) {
       setStatus("error");
@@ -340,7 +359,26 @@ export default function Home() {
         return;
       }
 
-      setCloset((prev) => [body as Garment, ...prev]);
+      const garment = body as Garment;
+
+      const { error: insertError } = await supabase.from("garments").insert({
+        id: garment.id,
+        user_id: user.id,
+        primary_color: garment.primaryColor,
+        secondary_colors: garment.secondaryColors,
+        category: garment.category,
+        pattern: garment.pattern,
+        fabric_weight: garment.fabricWeight,
+        formality: garment.formality,
+      });
+
+      if (insertError) {
+        setStatus("error");
+        setErrorMessage(`Couldn't save the garment: ${insertError.message}`);
+        return;
+      }
+
+      setCloset((prev) => [garment, ...prev]);
 
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
@@ -353,6 +391,19 @@ export default function Home() {
       setStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
     }
+  }
+
+  async function handleDeleteGarment(id: string) {
+    setClosetActionError(null);
+
+    const { error } = await supabase.from("garments").delete().eq("id", id);
+
+    if (error) {
+      setClosetActionError(error.message);
+      return;
+    }
+
+    setCloset((prev) => prev.filter((g) => g.id !== id));
   }
 
   const canGenerateOutfits = closet.length >= 2 && isProfileComplete;
@@ -611,7 +662,19 @@ export default function Home() {
             Your Closet
           </h2>
 
-          {closet.length === 0 ? (
+          {(closetLoadError || closetActionError) && (
+            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+              {closetLoadError
+                ? `Couldn't load your closet: ${closetLoadError}`
+                : `Couldn't remove that garment: ${closetActionError}`}
+            </p>
+          )}
+
+          {!closetLoaded ? (
+            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
+              Loading your closet…
+            </p>
+          ) : closet.length === 0 ? (
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">
               No garments yet — upload a photo to get started.
             </p>
@@ -624,9 +687,7 @@ export default function Home() {
                 >
                   <button
                     type="button"
-                    onClick={() =>
-                      setCloset((prev) => prev.filter((g) => g.id !== item.id))
-                    }
+                    onClick={() => handleDeleteGarment(item.id)}
                     aria-label="Remove garment"
                     className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                   >
