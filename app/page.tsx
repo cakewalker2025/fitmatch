@@ -104,15 +104,43 @@ function CustomSelect<T extends string>({
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
+const MAX_UPLOAD_DIMENSION = 1600;
+const UPLOAD_JPEG_QUALITY = 0.8;
+
+function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1] ?? "");
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      const scale = Math.min(1, MAX_UPLOAD_DIMENSION / Math.max(img.width, img.height));
+      const width = Math.round(img.width * scale);
+      const height = Math.round(img.height * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+
+      URL.revokeObjectURL(objectUrl);
+
+      if (!ctx) {
+        reject(new Error("Failed to get canvas context"));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", UPLOAD_JPEG_QUALITY);
+      resolve({ base64: dataUrl.split(",")[1] ?? "", mediaType: "image/jpeg" });
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-    reader.readAsDataURL(file);
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+
+    img.src = objectUrl;
   });
 }
 
@@ -227,15 +255,24 @@ export default function Home() {
     setErrorMessage(null);
 
     try {
-      const base64 = await fileToBase64(selectedFile);
+      const { base64, mediaType } = await resizeImageToBase64(selectedFile);
 
       const response = await fetch("/api/analyze-garment", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ base64, mediaType: selectedFile.type }),
+        body: JSON.stringify({ base64, mediaType }),
       });
 
-      const body = await response.json();
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        setStatus("error");
+        setErrorMessage(
+          "Something went wrong on the server. Please try a smaller photo or try again."
+        );
+        return;
+      }
 
       if (!response.ok) {
         setStatus("error");
@@ -293,7 +330,16 @@ export default function Home() {
         body: JSON.stringify({ wardrobe: closet, profile: realProfile }),
       });
 
-      const body = await response.json();
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        setOutfitStatus("error");
+        setOutfitErrorMessage(
+          "Something went wrong on the server. Please try a smaller photo or try again."
+        );
+        return;
+      }
 
       if (!response.ok) {
         setOutfitStatus("error");
