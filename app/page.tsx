@@ -440,7 +440,12 @@ export default function Home() {
   async function handleDeleteGarment(id: string) {
     setClosetActionError(null);
 
-    const { error } = await supabase.from("garments").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("garments")
+      .delete()
+      .eq("id", id)
+      .select("image_url")
+      .maybeSingle();
 
     if (error) {
       setClosetActionError(error.message);
@@ -448,6 +453,17 @@ export default function Home() {
     }
 
     setCloset((prev) => prev.filter((g) => g.id !== id));
+
+    const imagePath = data?.image_url;
+    if (imagePath) {
+      const { error: storageError } = await supabase.storage
+        .from(GARMENT_PHOTOS_BUCKET)
+        .remove([imagePath]);
+
+      if (storageError) {
+        console.warn(`Failed to delete garment photo at ${imagePath}:`, storageError.message);
+      }
+    }
   }
 
   const canGenerateOutfits = closet.length >= 2 && isProfileComplete;
