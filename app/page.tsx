@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Garment, Outfit, UserProfile } from "@/lib/types";
 import AuthSection from "@/components/AuthSection";
+import { createClient } from "@/lib/supabase/client";
 import { useSupabaseUser } from "@/lib/supabase/useUser";
 
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const CLOSET_STORAGE_KEY = "fitmatch:closet";
-const PROFILE_STORAGE_KEY = "fitmatch:profile";
+const PROFILE_SAVE_DEBOUNCE_MS = 800;
 
 const CONFIDENCE_DOT_COLOR: Record<Outfit["confidence"], string> = {
   high: "bg-green-500",
@@ -148,18 +149,21 @@ function resizeImageToBase64(file: File): Promise<{ base64: string; mediaType: s
 
 export default function Home() {
   const { user, loading: authLoading } = useSupabaseUser();
+  const supabase = useMemo(() => createClient(), []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [closet, setCloset] = useState<Garment[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [outfitStatus, setOutfitStatus] = useState<Status>("idle");
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const hasWrittenClosetRef = useRef(false);
-  const hasWrittenProfileRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -167,16 +171,6 @@ export default function Home() {
       if (rawCloset) {
         const parsed = JSON.parse(rawCloset);
         if (Array.isArray(parsed)) setCloset(parsed);
-      }
-    } catch {
-      // ignore — fall back to the empty default already set
-    }
-
-    try {
-      const rawProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
-      if (rawProfile) {
-        const parsed = JSON.parse(rawProfile);
-        setProfile({ ...EMPTY_PROFILE_DRAFT, ...parsed });
       }
     } catch {
       // ignore — fall back to the empty default already set
@@ -196,16 +190,79 @@ export default function Home() {
   }, [closet]);
 
   useEffect(() => {
-    if (!hasWrittenProfileRef.current) {
-      hasWrittenProfileRef.current = true;
+    if (!user) {
+      setProfile(EMPTY_PROFILE_DRAFT);
+      setProfileLoaded(false);
       return;
     }
-    try {
-      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-    } catch {
-      // ignore — e.g. private browsing storage restrictions
-    }
-  }, [profile]);
+
+    let cancelled = false;
+    setProfileLoaded(false);
+    setProfileLoadError(null);
+
+    supabase
+      .from("profiles")
+      .select(
+        "skin_undertone, skin_depth, hair_color, eye_color, body_shape, height, occasion, weather"
+      )
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+
+        if (error) {
+          setProfileLoadError(error.message);
+        } else {
+          setProfile(
+            data
+              ? {
+                  skinUndertone: (data.skin_undertone ?? "") as ProfileDraft["skinUndertone"],
+                  skinDepth: (data.skin_depth ?? "") as ProfileDraft["skinDepth"],
+                  hairColor: data.hair_color ?? "",
+                  eyeColor: data.eye_color ?? "",
+                  bodyShape: data.body_shape ?? "",
+                  height: data.height ?? "",
+                  occasion: data.occasion ?? "",
+                  weather: data.weather ?? "",
+                }
+              : EMPTY_PROFILE_DRAFT
+          );
+        }
+        setProfileLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, supabase]);
+
+  useEffect(() => {
+    if (!user || !profileLoaded) return;
+
+    const timeoutId = setTimeout(() => {
+      supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            skin_undertone: profile.skinUndertone || null,
+            skin_depth: profile.skinDepth || null,
+            hair_color: profile.hairColor || null,
+            eye_color: profile.eyeColor || null,
+            body_shape: profile.bodyShape || null,
+            height: profile.height || null,
+            occasion: profile.occasion || null,
+            weather: profile.weather || null,
+          },
+          { onConflict: "id" }
+        )
+        .then(({ error }) => {
+          setProfileSaveError(error ? error.message : null);
+        });
+    }, PROFILE_SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [profile, user, profileLoaded, supabase]);
 
   const isProfileComplete =
     profile.skinUndertone !== "" &&
@@ -427,6 +484,14 @@ export default function Home() {
               </span>
             )}
           </div>
+
+          {(profileLoadError || profileSaveError) && (
+            <p className="mt-2 text-xs text-red-700 dark:text-red-400">
+              {profileLoadError
+                ? `Couldn't load your profile: ${profileLoadError}`
+                : `Couldn't save your profile: ${profileSaveError}`}
+            </p>
+          )}
 
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
