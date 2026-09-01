@@ -56,7 +56,7 @@ export type Confidence = "high" | "medium" | "low";
 export interface ColorRoles {
   dominant: string;
   secondary: string;
-  accent: string;
+  accent?: string | null;
 }
 
 export interface Outfit {

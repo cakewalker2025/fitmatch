@@ -62,7 +62,7 @@ export const outfitSchema = z.object({
   colorRoles: z.object({
     dominant: z.string(),
     secondary: z.string(),
-    accent: z.string(),
+    accent: z.string().nullish(),
   }),
   reasoning: z.string(),
   confidence: confidenceSchema,
