@@ -79,12 +79,16 @@ function CustomSelect<T extends string>({
   hint,
   placeholder = "Select…",
   onChange,
+  allowClear = false,
+  clearLabel = "Any",
 }: {
   value: T | "";
   options: { value: T; label: string }[];
   hint: string;
   placeholder?: string;
-  onChange: (value: T) => void;
+  onChange: (value: T | "") => void;
+  allowClear?: boolean;
+  clearLabel?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,6 +124,18 @@ function CustomSelect<T extends string>({
           <p className="border-b border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
             {hint}
           </p>
+          {allowClear && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setIsOpen(false);
+              }}
+              className="block w-full px-3 py-2 text-left text-sm text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              {clearLabel}
+            </button>
+          )}
           {options.map((option) => (
             <button
               key={option.value}
@@ -1005,6 +1021,7 @@ export default function Home() {
                   onChange={setGenerationOccasion}
                   hint="What's the occasion for this outfit?"
                   options={OCCASION_OPTIONS}
+                  allowClear
                 />
               </div>
 
@@ -1017,6 +1034,7 @@ export default function Home() {
                   onChange={setGenerationWeather}
                   hint="What's the weather like today?"
                   options={WEATHER_OPTIONS}
+                  allowClear
                 />
               </div>
             </div>
