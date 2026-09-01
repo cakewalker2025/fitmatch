@@ -36,6 +36,7 @@ export const formalitySchema = z.enum([
 export const garmentSchema = z.object({
   id: z.string(),
   category: garmentCategorySchema,
+  itemType: z.string().min(1).max(60),
   primaryColor: hexColorSchema,
   secondaryColors: z.array(hexColorSchema),
   pattern: patternSchema,

@@ -271,7 +271,7 @@ export default function Home() {
     supabase
       .from("garments")
       .select(
-        "id, primary_color, secondary_colors, category, pattern, fabric_weight, formality, image_url, created_at"
+        "id, primary_color, secondary_colors, category, item_type, pattern, fabric_weight, formality, image_url, created_at"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
@@ -303,6 +303,7 @@ export default function Home() {
             rows.map((row, index) => ({
               id: row.id,
               category: row.category,
+              itemType: row.item_type,
               primaryColor: row.primary_color,
               secondaryColors: row.secondary_colors ?? [],
               pattern: row.pattern,
@@ -502,6 +503,7 @@ export default function Home() {
         primary_color: garment.primaryColor,
         secondary_colors: garment.secondaryColors,
         category: garment.category,
+        item_type: garment.itemType,
         pattern: garment.pattern,
         fabric_weight: garment.fabricWeight,
         formality: garment.formality,
@@ -987,6 +989,12 @@ export default function Home() {
                   <dl className="text-xs leading-tight">
                     <dt className="text-zinc-500 dark:text-zinc-500">Category</dt>
                     <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.category}</dd>
+                    {item.itemType && (
+                      <>
+                        <dt className="text-zinc-500 dark:text-zinc-500">Type</dt>
+                        <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.itemType}</dd>
+                      </>
+                    )}
                     <dt className="text-zinc-500 dark:text-zinc-500">Pattern</dt>
                     <dd className="mb-1 text-zinc-800 dark:text-zinc-200">{item.pattern}</dd>
                     <dt className="text-zinc-500 dark:text-zinc-500">Fabric Weight</dt>

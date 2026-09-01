@@ -5,6 +5,7 @@ Respond with ONLY valid JSON, no prose outside it, matching this exact shape:
 
 {
   "category": "top" | "bottom" | "dress" | "outerwear" | "footwear" | "accessory",
+  "itemType": "short, specific description (2-5 words) of exactly what this item is",
   "primaryColor": "#rrggbb",
   "secondaryColors": ["#rrggbb"],
   "pattern": "solid" | "striped" | "plaid" | "floral" | "polka-dot" | "graphic" | "textured" | "other",
@@ -13,6 +14,7 @@ Respond with ONLY valid JSON, no prose outside it, matching this exact shape:
 }
 
 ## RULES
+- "itemType" is a short, specific description (2-5 words, not a sentence) of exactly what this item is — specific enough to distinguish it from other items in the same broad category (e.g. within "accessory": "leather belt" vs. "gold hoop earrings" vs. "wool beanie"; within "footwear": "canvas sneakers" vs. "leather ankle boots"). Don't repeat color or pattern already captured in other fields unless the material/style itself needs it for identification (e.g. "wide-brim sun hat", not "hat").
 - "primaryColor" is the single most dominant color of the garment, as a 6-digit hex code sampled from the actual fabric color in the photo, not a lighting-washed-out estimate.
 - "secondaryColors" lists any other distinct colors present (trim, pattern colors, accents). Use an empty array if the item is a single solid color.
 - Infer "fabricWeight" from visible texture, drape, and material cues (e.g. knit sweaters and denim are typically "heavy"; t-shirt cotton and silk are typically "light").

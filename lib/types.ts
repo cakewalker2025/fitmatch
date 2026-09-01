@@ -23,6 +23,7 @@ export type Formality = "casual" | "smart-casual" | "business" | "formal";
 export interface Garment {
   id: string;
   category: GarmentCategory;
+  itemType?: string | null;
   primaryColor: string;
   secondaryColors: string[];
   pattern: Pattern;
