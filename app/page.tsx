@@ -228,7 +228,7 @@ export default function Home() {
     supabase
       .from("garments")
       .select(
-        "id, primary_color, secondary_colors, category, pattern, fabric_weight, formality, image_url"
+        "id, primary_color, secondary_colors, category, pattern, fabric_weight, formality, image_url, created_at"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
@@ -266,6 +266,7 @@ export default function Home() {
               fabricWeight: row.fabric_weight,
               formality: row.formality,
               photoUrl: photoUrls[index],
+              createdAt: row.created_at,
             }))
           );
         }
@@ -588,12 +589,25 @@ export default function Home() {
   const atGenerationLimit =
     subscriptionStatus !== "active" && generationsUsed >= FREE_GENERATION_LIMIT;
 
-  const canGenerateOutfits = closet.length >= 2 && isProfileComplete && !atGenerationLimit;
+  const activeGarmentIds = useMemo(() => {
+    if (subscriptionStatus === "active") {
+      return new Set(closet.map((g) => g.id));
+    }
+    const sortedAscending = [...closet].sort((a, b) =>
+      (a.createdAt ?? "").localeCompare(b.createdAt ?? "")
+    );
+    return new Set(sortedAscending.slice(0, FREE_GARMENT_LIMIT).map((g) => g.id));
+  }, [closet, subscriptionStatus]);
+
+  const activeCloset = closet.filter((g) => activeGarmentIds.has(g.id));
+
+  const canGenerateOutfits =
+    activeCloset.length >= 2 && isProfileComplete && !atGenerationLimit;
 
   const generateOutfitsHint = canGenerateOutfits
     ? null
     : [
-        closet.length < 2 ? "Add at least 2 garments" : null,
+        activeCloset.length < 2 ? "Add at least 2 garments" : null,
         !isProfileComplete ? "Complete your profile above" : null,
       ]
         .filter(Boolean)
@@ -620,7 +634,7 @@ export default function Home() {
       const response = await fetch("/api/generate-outfit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ wardrobe: closet, profile: realProfile }),
+        body: JSON.stringify({ wardrobe: activeCloset, profile: realProfile }),
       });
 
       let body;
@@ -917,10 +931,16 @@ export default function Home() {
             </p>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {closet.map((item) => (
+              {closet.map((item) => {
+                const isDisabled = !activeGarmentIds.has(item.id);
+                return (
                 <div
                   key={item.id}
-                  className="relative flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+                  className={
+                    isDisabled
+                      ? "relative flex flex-col gap-2 rounded-lg border border-red-300 bg-red-50/50 p-3 opacity-60 dark:border-red-900 dark:bg-red-950/30"
+                      : "relative flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+                  }
                 >
                   <button
                     type="button"
@@ -930,6 +950,12 @@ export default function Home() {
                   >
                     ×
                   </button>
+
+                  {isDisabled && (
+                    <span className="w-fit rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-900 dark:text-red-300">
+                      Over free limit
+                    </span>
+                  )}
 
                   {item.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -957,7 +983,8 @@ export default function Home() {
                     <dd className="text-zinc-800 dark:text-zinc-200">{item.formality}</dd>
                   </dl>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

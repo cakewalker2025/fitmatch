@@ -29,6 +29,7 @@ export interface Garment {
   fabricWeight: FabricWeight;
   formality: Formality;
   photoUrl?: string | null;
+  createdAt?: string;
 }
 
 export type SkinUndertone = "warm" | "cool" | "neutral";
