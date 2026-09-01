@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Garment, Outfit, UserProfile } from "@/lib/types";
 
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+const CLOSET_STORAGE_KEY = "fitmatch:closet";
+const PROFILE_STORAGE_KEY = "fitmatch:profile";
 
 const CONFIDENCE_DOT_COLOR: Record<Outfit["confidence"], string> = {
   high: "bg-green-500",
@@ -35,6 +38,72 @@ const EMPTY_PROFILE_DRAFT: ProfileDraft = {
   weather: "",
 };
 
+function CustomSelect<T extends string>({
+  value,
+  options,
+  hint,
+  placeholder = "Select…",
+  onChange,
+}: {
+  value: T | "";
+  options: { value: T; label: string }[];
+  hint: string;
+  placeholder?: string;
+  onChange: (value: T) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const selectedLabel = options.find((option) => option.value === value)?.label;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between rounded-lg border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+      >
+        {selectedLabel ?? <span className="text-zinc-400 dark:text-zinc-500">{placeholder}</span>}
+        <span className="text-zinc-400 dark:text-zinc-500">▾</span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          <p className="border-b border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
+            {hint}
+          </p>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="block w-full px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,6 +127,54 @@ export default function Home() {
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const hasWrittenClosetRef = useRef(false);
+  const hasWrittenProfileRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const rawCloset = localStorage.getItem(CLOSET_STORAGE_KEY);
+      if (rawCloset) {
+        const parsed = JSON.parse(rawCloset);
+        if (Array.isArray(parsed)) setCloset(parsed);
+      }
+    } catch {
+      // ignore — fall back to the empty default already set
+    }
+
+    try {
+      const rawProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (rawProfile) {
+        const parsed = JSON.parse(rawProfile);
+        setProfile({ ...EMPTY_PROFILE_DRAFT, ...parsed });
+      }
+    } catch {
+      // ignore — fall back to the empty default already set
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasWrittenClosetRef.current) {
+      hasWrittenClosetRef.current = true;
+      return;
+    }
+    try {
+      localStorage.setItem(CLOSET_STORAGE_KEY, JSON.stringify(closet));
+    } catch {
+      // ignore — e.g. private browsing storage restrictions
+    }
+  }, [closet]);
+
+  useEffect(() => {
+    if (!hasWrittenProfileRef.current) {
+      hasWrittenProfileRef.current = true;
+      return;
+    }
+    try {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    } catch {
+      // ignore — e.g. private browsing storage restrictions
+    }
+  }, [profile]);
 
   const isProfileComplete =
     profile.skinUndertone !== "" &&
@@ -261,46 +378,6 @@ export default function Home() {
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Skin Undertone
-              </label>
-              <select
-                value={profile.skinUndertone}
-                onChange={(e) =>
-                  updateProfile("skinUndertone", e.target.value as ProfileDraft["skinUndertone"])
-                }
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                <option value="" disabled>
-                  Select…
-                </option>
-                <option value="warm">Warm</option>
-                <option value="cool">Cool</option>
-                <option value="neutral">Neutral</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Skin Depth
-              </label>
-              <select
-                value={profile.skinDepth}
-                onChange={(e) =>
-                  updateProfile("skinDepth", e.target.value as ProfileDraft["skinDepth"])
-                }
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                <option value="" disabled>
-                  Select…
-                </option>
-                <option value="light">Light</option>
-                <option value="medium">Medium</option>
-                <option value="deep">Deep</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                 Hair Color
               </label>
               <input
@@ -322,6 +399,22 @@ export default function Home() {
                 onChange={(e) => updateProfile("eyeColor", e.target.value)}
                 placeholder="e.g. brown"
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Skin Undertone
+              </label>
+              <CustomSelect
+                value={profile.skinUndertone}
+                onChange={(value) => updateProfile("skinUndertone", value)}
+                hint="Not sure? Look at the veins on your wrist — greenish usually means warm, blue/purple usually means cool. Or: does gold or silver jewelry suit you better? Gold = warm, silver = cool."
+                options={[
+                  { value: "warm", label: "Warm" },
+                  { value: "cool", label: "Cool" },
+                  { value: "neutral", label: "Neutral" },
+                ]}
               />
             </div>
 
@@ -361,6 +454,22 @@ export default function Home() {
                 onChange={(e) => updateProfile("occasion", e.target.value)}
                 placeholder="e.g. business casual office day"
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Skin Depth
+              </label>
+              <CustomSelect
+                value={profile.skinDepth}
+                onChange={(value) => updateProfile("skinDepth", value)}
+                hint="How light or dark your natural skin tone is overall."
+                options={[
+                  { value: "light", label: "Light" },
+                  { value: "medium", label: "Medium" },
+                  { value: "deep", label: "Deep" },
+                ]}
               />
             </div>
 
