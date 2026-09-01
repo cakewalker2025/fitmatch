@@ -42,7 +42,7 @@ export interface UserProfile {
   eyeColor: string;
   bodyShape: string;
   height: string;
-  occasion: string;
+  occasion?: string;
   weather?: string;
 }
 

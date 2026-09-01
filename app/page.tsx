@@ -33,8 +33,6 @@ type ProfileDraft = {
   eyeColor: string;
   bodyShape: string;
   height: string;
-  occasion: string;
-  weather: string;
 };
 
 const EMPTY_PROFILE_DRAFT: ProfileDraft = {
@@ -44,9 +42,36 @@ const EMPTY_PROFILE_DRAFT: ProfileDraft = {
   eyeColor: "",
   bodyShape: "",
   height: "",
-  occasion: "",
-  weather: "",
 };
+
+type Occasion =
+  | "Casual"
+  | "Business Casual"
+  | "Business/Formal"
+  | "Date Night"
+  | "Athletic/Activewear"
+  | "Special Event";
+
+const OCCASION_OPTIONS: { value: Occasion; label: Occasion }[] = [
+  { value: "Casual", label: "Casual" },
+  { value: "Business Casual", label: "Business Casual" },
+  { value: "Business/Formal", label: "Business/Formal" },
+  { value: "Date Night", label: "Date Night" },
+  { value: "Athletic/Activewear", label: "Athletic/Activewear" },
+  { value: "Special Event", label: "Special Event" },
+];
+
+type Weather = "Hot" | "Warm" | "Mild" | "Cool" | "Cold" | "Rainy" | "Snowy";
+
+const WEATHER_OPTIONS: { value: Weather; label: Weather }[] = [
+  { value: "Hot", label: "Hot" },
+  { value: "Warm", label: "Warm" },
+  { value: "Mild", label: "Mild" },
+  { value: "Cool", label: "Cool" },
+  { value: "Cold", label: "Cold" },
+  { value: "Rainy", label: "Rainy" },
+  { value: "Snowy", label: "Snowy" },
+];
 
 function CustomSelect<T extends string>({
   value,
@@ -194,6 +219,8 @@ export default function Home() {
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
   const [generationsUsed, setGenerationsUsed] = useState(0);
+  const [generationOccasion, setGenerationOccasion] = useState<Occasion | "">("");
+  const [generationWeather, setGenerationWeather] = useState<Weather | "">("");
   const [outfitStatus, setOutfitStatus] = useState<Status>("idle");
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
@@ -293,7 +320,7 @@ export default function Home() {
     supabase
       .from("profiles")
       .select(
-        "skin_undertone, skin_depth, hair_color, eye_color, body_shape, height, occasion, weather, subscription_status"
+        "skin_undertone, skin_depth, hair_color, eye_color, body_shape, height, subscription_status"
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -312,8 +339,6 @@ export default function Home() {
                   eyeColor: data.eye_color ?? "",
                   bodyShape: data.body_shape ?? "",
                   height: data.height ?? "",
-                  occasion: data.occasion ?? "",
-                  weather: data.weather ?? "",
                 }
               : EMPTY_PROFILE_DRAFT
           );
@@ -366,8 +391,6 @@ export default function Home() {
             eye_color: profile.eyeColor || null,
             body_shape: profile.bodyShape || null,
             height: profile.height || null,
-            occasion: profile.occasion || null,
-            weather: profile.weather || null,
           },
           { onConflict: "id" }
         )
@@ -385,8 +408,7 @@ export default function Home() {
     profile.hairColor.trim() !== "" &&
     profile.eyeColor.trim() !== "" &&
     profile.bodyShape.trim() !== "" &&
-    profile.height.trim() !== "" &&
-    profile.occasion.trim() !== "";
+    profile.height.trim() !== "";
 
   function updateProfile<K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -623,8 +645,8 @@ export default function Home() {
       eyeColor: profile.eyeColor,
       bodyShape: profile.bodyShape,
       height: profile.height,
-      occasion: profile.occasion,
-      ...(profile.weather.trim() !== "" ? { weather: profile.weather } : {}),
+      ...(generationOccasion !== "" ? { occasion: generationOccasion } : {}),
+      ...(generationWeather !== "" ? { weather: generationWeather } : {}),
     };
 
     setOutfitStatus("loading");
@@ -866,19 +888,6 @@ export default function Home() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Occasion
-              </label>
-              <input
-                type="text"
-                value={profile.occasion}
-                onChange={(e) => updateProfile("occasion", e.target.value)}
-                placeholder="e.g. business casual office day"
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                 Skin Depth
               </label>
               <CustomSelect
@@ -890,19 +899,6 @@ export default function Home() {
                   { value: "medium", label: "Medium" },
                   { value: "deep", label: "Deep" },
                 ]}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Weather <span className="font-normal text-zinc-500 dark:text-zinc-500">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={profile.weather}
-                onChange={(e) => updateProfile("weather", e.target.value)}
-                placeholder="e.g. mild, 65°F"
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
               />
             </div>
           </div>
@@ -993,6 +989,38 @@ export default function Home() {
           <h2 className="text-lg font-semibold tracking-tight text-black dark:text-zinc-50">
             Generate Outfits
           </h2>
+
+          <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+            <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              What&apos;s this for?{" "}
+              <span className="font-normal text-zinc-500 dark:text-zinc-500">(optional)</span>
+            </h3>
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Occasion
+                </label>
+                <CustomSelect
+                  value={generationOccasion}
+                  onChange={setGenerationOccasion}
+                  hint="What's the occasion for this outfit?"
+                  options={OCCASION_OPTIONS}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Weather
+                </label>
+                <CustomSelect
+                  value={generationWeather}
+                  onChange={setGenerationWeather}
+                  hint="What's the weather like today?"
+                  options={WEATHER_OPTIONS}
+                />
+              </div>
+            </div>
+          </div>
 
           <button
             type="button"
