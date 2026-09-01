@@ -9,6 +9,14 @@ import { useSupabaseUser } from "@/lib/supabase/useUser";
 const ALLOWED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const PROFILE_SAVE_DEBOUNCE_MS = 800;
+const FREE_GARMENT_LIMIT = 10;
+const FREE_GENERATION_LIMIT = 1;
+
+function currentUtcMonthStart(): string {
+  const now = new Date();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${now.getUTCFullYear()}-${month}-01`;
+}
 
 const CONFIDENCE_DOT_COLOR: Record<Outfit["confidence"], string> = {
   high: "bg-green-500",
@@ -185,6 +193,7 @@ export default function Home() {
   const [upgradeStatus, setUpgradeStatus] = useState<Status>("idle");
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+  const [generationsUsed, setGenerationsUsed] = useState(0);
   const [outfitStatus, setOutfitStatus] = useState<Status>("idle");
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
@@ -310,6 +319,30 @@ export default function Home() {
           setSubscriptionStatus(data?.subscription_status ?? "none");
         }
         setProfileLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, supabase]);
+
+  useEffect(() => {
+    if (!user) {
+      setGenerationsUsed(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    supabase
+      .from("outfit_generation_usage")
+      .select("generations_count")
+      .eq("user_id", user.id)
+      .eq("period_start", currentUtcMonthStart())
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error) return;
+        setGenerationsUsed(data?.generations_count ?? 0);
       });
 
     return () => {
@@ -550,7 +583,12 @@ export default function Home() {
     }
   }
 
-  const canGenerateOutfits = closet.length >= 2 && isProfileComplete;
+  const atGarmentLimit =
+    subscriptionStatus !== "active" && closet.length >= FREE_GARMENT_LIMIT;
+  const atGenerationLimit =
+    subscriptionStatus !== "active" && generationsUsed >= FREE_GENERATION_LIMIT;
+
+  const canGenerateOutfits = closet.length >= 2 && isProfileComplete && !atGenerationLimit;
 
   const generateOutfitsHint = canGenerateOutfits
     ? null
@@ -604,6 +642,9 @@ export default function Home() {
 
       setOutfits(body as Outfit[]);
       setOutfitStatus("success");
+      if (subscriptionStatus !== "active") {
+        setGenerationsUsed((prev) => prev + 1);
+      }
     } catch (error) {
       setOutfitStatus("error");
       setOutfitErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
@@ -685,7 +726,7 @@ export default function Home() {
         <button
           type="button"
           onClick={handleAnalyze}
-          disabled={!selectedFile || status === "loading"}
+          disabled={!selectedFile || status === "loading" || atGarmentLimit}
           className="flex h-11 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#ccc]"
         >
           {status === "loading" && (
@@ -693,6 +734,22 @@ export default function Home() {
           )}
           {status === "loading" ? "Analyzing…" : "Analyze"}
         </button>
+
+        {atGarmentLimit && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+            <span>
+              Free plan limit reached ({FREE_GARMENT_LIMIT}/{FREE_GARMENT_LIMIT} garments) —
+              upgrade to add more.
+            </span>
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              className="shrink-0 rounded-full border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900"
+            >
+              Upgrade
+            </button>
+          </div>
+        )}
 
         {status === "error" && errorMessage && (
           <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
@@ -926,6 +983,22 @@ export default function Home() {
             <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
               {generateOutfitsHint}
             </p>
+          )}
+
+          {atGenerationLimit && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+              <span>
+                Free plan limit reached ({FREE_GENERATION_LIMIT}/{FREE_GENERATION_LIMIT} this
+                month) — upgrade for unlimited.
+              </span>
+              <button
+                type="button"
+                onClick={handleUpgrade}
+                className="shrink-0 rounded-full border border-amber-400 px-3 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900"
+              >
+                Upgrade
+              </button>
+            </div>
           )}
 
           {outfitStatus === "error" && outfitErrorMessage && (
