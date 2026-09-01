@@ -181,10 +181,29 @@ export default function Home() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("none");
+  const [upgradeStatus, setUpgradeStatus] = useState<Status>("idle");
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
   const [outfitStatus, setOutfitStatus] = useState<Status>("idle");
   const [outfits, setOutfits] = useState<Outfit[]>([]);
   const [outfitErrorMessage, setOutfitErrorMessage] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+
+    if (checkout === "success") {
+      setCheckoutNotice("Subscription successful — welcome to Pro!");
+    } else if (checkout === "cancelled") {
+      setCheckoutNotice("Checkout cancelled — you can upgrade anytime.");
+    }
+
+    if (checkout) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -253,6 +272,7 @@ export default function Home() {
     if (!user) {
       setProfile(EMPTY_PROFILE_DRAFT);
       setProfileLoaded(false);
+      setSubscriptionStatus("none");
       return;
     }
 
@@ -263,7 +283,7 @@ export default function Home() {
     supabase
       .from("profiles")
       .select(
-        "skin_undertone, skin_depth, hair_color, eye_color, body_shape, height, occasion, weather"
+        "skin_undertone, skin_depth, hair_color, eye_color, body_shape, height, occasion, weather, subscription_status"
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -287,6 +307,7 @@ export default function Home() {
                 }
               : EMPTY_PROFILE_DRAFT
           );
+          setSubscriptionStatus(data?.subscription_status ?? "none");
         }
         setProfileLoaded(true);
       });
@@ -500,6 +521,35 @@ export default function Home() {
     }
   }
 
+  async function handleUpgrade() {
+    setUpgradeStatus("loading");
+    setUpgradeError(null);
+
+    try {
+      const response = await fetch("/api/create-checkout-session", { method: "POST" });
+
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        setUpgradeStatus("error");
+        setUpgradeError("Something went wrong on the server. Please try again.");
+        return;
+      }
+
+      if (!response.ok) {
+        setUpgradeStatus("error");
+        setUpgradeError(body.error ?? "Something went wrong starting checkout.");
+        return;
+      }
+
+      window.location.href = body.url;
+    } catch (error) {
+      setUpgradeStatus("error");
+      setUpgradeError(error instanceof Error ? error.message : "Something went wrong.");
+    }
+  }
+
   const canGenerateOutfits = closet.length >= 2 && isProfileComplete;
 
   const generateOutfitsHint = canGenerateOutfits
@@ -567,6 +617,38 @@ export default function Home() {
 
         {!authLoading && user && (
           <>
+        {checkoutNotice && (
+          <div className="rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300">
+            {checkoutNotice}
+          </div>
+        )}
+
+        {profileLoaded && subscriptionStatus !== "active" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-900 dark:bg-amber-950">
+            <h2 className="text-lg font-semibold tracking-tight text-black dark:text-zinc-50">
+              Upgrade to Pro
+            </h2>
+            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+              Unlimited garments &amp; outfit generations — $4.99/month.
+            </p>
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              disabled={upgradeStatus === "loading"}
+              className="mt-3 flex h-10 items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-[#ccc]"
+            >
+              {upgradeStatus === "loading" && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-background/40 border-t-background" />
+              )}
+              {upgradeStatus === "loading" ? "Redirecting…" : "Upgrade to Pro"}
+            </button>
+
+            {upgradeStatus === "error" && upgradeError && (
+              <p className="mt-2 text-xs text-red-700 dark:text-red-400">{upgradeError}</p>
+            )}
+          </div>
+        )}
+
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
             FitMatch — Garment Analyzer
