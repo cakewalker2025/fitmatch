@@ -111,6 +111,7 @@ const UPLOAD_JPEG_QUALITY = 0.8;
 const PHOTO_STORAGE_MAX_DIMENSION = 400;
 const PHOTO_STORAGE_WEBP_QUALITY = 0.75;
 const GARMENT_PHOTOS_BUCKET = "garment-photos";
+const PHOTO_SIGNED_URL_TTL_SECONDS = 3600;
 
 function loadImageToCanvas(file: File, maxDimension: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
@@ -198,17 +199,37 @@ export default function Home() {
 
     supabase
       .from("garments")
-      .select("id, primary_color, secondary_colors, category, pattern, fabric_weight, formality")
+      .select(
+        "id, primary_color, secondary_colors, category, pattern, fabric_weight, formality, image_url"
+      )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (cancelled) return;
 
         if (error) {
           setClosetLoadError(error.message);
         } else {
+          const rows = data ?? [];
+
+          const photoUrls = await Promise.all(
+            rows.map((row) =>
+              row.image_url
+                ? supabase.storage
+                    .from(GARMENT_PHOTOS_BUCKET)
+                    .createSignedUrl(row.image_url, PHOTO_SIGNED_URL_TTL_SECONDS)
+                    .then(({ data: signedData, error: signedError }) =>
+                      signedError ? null : (signedData?.signedUrl ?? null)
+                    )
+                    .catch(() => null)
+                : Promise.resolve(null)
+            )
+          );
+
+          if (cancelled) return;
+
           setCloset(
-            (data ?? []).map((row) => ({
+            rows.map((row, index) => ({
               id: row.id,
               category: row.category,
               primaryColor: row.primary_color,
@@ -216,6 +237,7 @@ export default function Home() {
               pattern: row.pattern,
               fabricWeight: row.fabric_weight,
               formality: row.formality,
+              photoUrl: photoUrls[index],
             }))
           );
         }
@@ -418,6 +440,18 @@ export default function Home() {
 
           if (photoUpdateError) {
             setPhotoUploadNotice("Garment added, but the photo couldn't be saved.");
+          } else {
+            const { data: signedData, error: signedError } = await supabase.storage
+              .from(GARMENT_PHOTOS_BUCKET)
+              .createSignedUrl(photoPath, PHOTO_SIGNED_URL_TTL_SECONDS);
+
+            if (!signedError && signedData?.signedUrl) {
+              setCloset((prev) =>
+                prev.map((g) =>
+                  g.id === garment.id ? { ...g, photoUrl: signedData.signedUrl } : g
+                )
+              );
+            }
           }
         }
       } catch {
@@ -758,10 +792,20 @@ export default function Home() {
                     ×
                   </button>
 
-                  <div
-                    className="h-8 w-8 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700"
-                    style={{ backgroundColor: item.primaryColor }}
-                  />
+                  {item.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.photoUrl}
+                      alt={`${item.category} garment photo`}
+                      className="h-8 w-8 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700"
+                      style={{ objectFit: "cover" }}
+                    />
+                  ) : (
+                    <div
+                      className="h-8 w-8 shrink-0 rounded-md border border-zinc-300 dark:border-zinc-700"
+                      style={{ backgroundColor: item.primaryColor }}
+                    />
+                  )}
 
                   <dl className="text-xs leading-tight">
                     <dt className="text-zinc-500 dark:text-zinc-500">Category</dt>
